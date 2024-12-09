@@ -4,15 +4,30 @@ from flask_pymongo import PyMongo
 
 app = Flask(__name__)
 CORS(app)
-app.config["MONGO_URI"] = "mongodb+srv://sanmay:zGP6ju1GWAU5NIiK@cluster0.lbzvc.mongodb.net/mini-project"
+app.config["MONGO_URI"] = "mongodb://localhost:27017/miniproject"
 mongo = PyMongo(app)
 db = mongo.db
 
 users = db.Users
+internshalla = db.internshala
+@app.route("/home", methods=['GET'])
+def home():
+    job_list = internshalla.find()
+    jobs = [{"title": job["title"], "company": job["company"],"link":job["link"],"location":job["location"],"salary":job["salary"]} for job in job_list]
+    return jsonify(jobs)
 
-@app.route("/test", methods=['GET'])
-def test():
-    return jsonify({"message": ["Hello world", "how are you today", "good?"]})
+@app.route("/profile", methods=['GET'])
+def profile():
+    username = request.args.get("user")
+    user = users.find_one({"username": username})
+    if(user):
+        #profile = user['profile']
+        print( user['profile'])
+        return jsonify(user['profile'])
+    else:
+        return jsonify({"error":"no user found"}), 400
+    
+    return jsonify({"error":"some error"}), 404
 
 @app.route("/login", methods=['POST'])
 def login():
@@ -23,21 +38,31 @@ def login():
     if not username or not password:
         return jsonify({"error": "Username and password are required"}), 400
 
-    # Find the user by username
     user = users.find_one({"username": username})
 
-    # If user doesn't exist, return an error
     if not user:
-        return jsonify({"message": "Wrong username or password"}), 401
+        return jsonify({"message": "Wrong username or password"}) 
 
-    # Get the stored password (plain text)
     stored_password = user['password']
 
-    # Compare the stored password with the entered password
     if password != stored_password:
-        return jsonify({"message": "Wrong username or password"}), 401
+        return jsonify({"message": "Wrong username or password"})
 
-    return jsonify({"message": "Logged in successfully"}), 200
+    return jsonify({"message": "success"}), 200
+
+@app.route("/profile/<name>",methods=["POST","GET"])
+def updateProfile(name):
+    username = request.args.get("user")
+    query = {'username':username,'profile':name}
+    user = internshalla.find_one(query)
+    if request.method == 'GET':
+        if(user):
+            return jsonify({"msg":"none"})
+        return jsonify(user)
+    else:
+        data=request.json
+        
+    pass
 
 @app.route("/register", methods=["POST"])
 def reg():
@@ -47,13 +72,11 @@ def reg():
     password = data.get("password")
 
     if not username or not email or not password:
-        return jsonify({"error": "Username, email, and password are required"}), 400
+        return jsonify({"message": "Username, email, and password are required"}), 201
 
-    # Check if the username already exists
     if users.find_one({"username": username}):
-        return jsonify({"error": "Username already exists"}), 400
+        return jsonify({"message": "Username already exists"}), 201
 
-    # Insert the new user with plain text password into the database
     users.insert_one({"username": username, "password": password, "email": email})
 
     return jsonify({"message": "User successfully registered"}), 201
