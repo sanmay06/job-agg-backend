@@ -3,7 +3,7 @@ from flask_cors import CORS
 from flask_pymongo import PyMongo
 from userAuthentication import register, login
 from profile import profileSend,profileReg
-from jobs import internshala
+from jobs import internshala, adzuna, Times_job ,jobRapido
 
 app = Flask(__name__)
 CORS(app)
@@ -12,23 +12,57 @@ mongo = PyMongo(app)
 db = mongo.db
 
 users = db.Users
-internshalla = db.internshala
+jobsDB = db.jobs
+
 @app.route("/home/<profile>", methods=['GET'])
 def home(profile):
     username = request.args.get('user')
-    result = users.find_one({"username":username,"profiles.name":profile},{"profiles.$":1})
+    result = users.find_one({"username": username, "profiles.name": profile}, {"profiles.$": 1})
+
     if result and "profiles" in result:
-        result["_id"] = str(result["_id"])
         profile_data = result["profiles"][0]
-        #print(profile_data)
         title = profile_data['search']
-        internshala(title,internshalla)
-        #print(title)
-        jobs = mongo.db.internshala.find_one({"category": title}, {"_id": 0})
-        if jobs:
-            return jsonify(jobs[title]), 200
+        websites = profile_data['sites']
+        location = profile_data['location']
+        max = profile_data['max']
+        min = profile_data['min']
+        # Trigger scraping functions if necessary
+        if "Internshala" in websites:
+            internshala(title, jobsDB, location)
+        if "Adzuna" in websites:
+            adzuna(title, jobsDB, location)
+        if "TimesJobs" in websites:
+            Times_job(title, jobsDB, location)
+        if "JobRapido" in websites:
+            jobRapido(title, jobsDB, location)
+
+
+        jobs = jobsDB.find_one({"category": title,"jobs.location":location,"jobs.salary":{"$gte":min,"$lte":max}}, {"_id": 0, "jobs": 1})
+        
+        #print("Jobs query result:", jobs)  
+
+        if jobs:  
+            job_entries = jobs.get("jobs", [])
+            
+            #print("Extracted jobs:", job_entries)  
+
+            if job_entries: 
+                if websites: 
+                    filtered_jobs = [
+                        job for job in job_entries if job["website"] in websites
+                    ]
+                    #print("Filtered jobs by websites:", filtered_jobs)  
+
+                    if filtered_jobs:
+                        return jsonify(filtered_jobs), 200
+                    return jsonify({"message": "No jobs found for the given websites"}), 404
+
+                return jsonify(job_entries), 200
+            else:
+                return jsonify({"message": "No jobs found in 'jobs'"}), 404
         else:
-            return jsonify({"message": "No jobs found for the given title"}), 404
+            return jsonify({"message": f"No data found for category '{title}'"}), 404
+
     return jsonify({"message": "Profile not found"}), 404
 
 @app.route("/profile", methods=['GET'])
@@ -52,7 +86,7 @@ def updateProfile(name):
         if result and "profiles" in result:
             result["_id"] = str(result["_id"])
             profile_data = result["profiles"][0]
-            print(profile_data)
+            #print(profile_data)
             return jsonify({"profile_data":profile_data,"msg": "found"}), 200
         return jsonify({"msg":"none"})
     else:
@@ -62,8 +96,10 @@ def updateProfile(name):
         sites = data.get('sites')
         search = data .get('search')
         column = data.get('columns')
-        return profileReg(username, sites, search, column, users, name)        
-    pass
+        min = data.get('min')
+        max = data.get('max')
+        location = data.get('location')
+        return profileReg(username, sites, search, column, users, name, min, max, location)
 
 @app.route("/register", methods=["POST"])
 def reg():
