@@ -50,7 +50,7 @@ def profileReg(username, sites, search, column, users, name, min_val, max_val, l
             "$push": {
                 'profiles': {
                     'name': name,
-                    'search': search,
+                    'search': search.lower(),
                     'sites': sites,
                     'column': column,
                     'min': min_val,
