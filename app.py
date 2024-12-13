@@ -37,7 +37,7 @@ def home(profile):
             jobRapido(title, jobsDB, location)
 
 
-        jobs = jobsDB.find_one({"category": title,"jobs.location":location,"jobs.salary":{"$gte":min,"$lte":max}}, {"_id": 0, "jobs": 1})
+        jobs = jobsDB.find_one({"category": title,"jobs.salary":{"$gte":min,"$lte":max}}, {"_id": 0, "jobs": 1})
         
         #print("Jobs query result:", jobs)  
 
@@ -49,7 +49,7 @@ def home(profile):
             if job_entries: 
                 if websites: 
                     filtered_jobs = [
-                        job for job in job_entries if job["website"] in websites
+                        job for job in job_entries if job["website"] in websites and job["location"]
                     ]
                     #print("Filtered jobs by websites:", filtered_jobs)  
 

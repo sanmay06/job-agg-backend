@@ -42,7 +42,6 @@ def addDB(job, title, name, location, salary, url, db, website):
     }
 
 
-
     db.update_one(
         {"category": job},
         {"$push": {"jobs": job_data}},
