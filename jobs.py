@@ -71,7 +71,7 @@ def addDB(job, title, name, location, salary, url, website):
 
 def internshala(title, location):
     jobs_list = []
-    for i in range(1, 2):
+    for i in range(1, 1):
         response = requests.get(f"https://internshala.com/internships/{title}-internship-in-{location}/page-{i}/")
         soup = BeautifulSoup(response.text, 'html.parser')
         cards = soup.find_all('div', 'container-fluid')
@@ -93,7 +93,7 @@ def internshala(title, location):
 def adzuna(title, location):
     jobs_list = []
     base_url = "https://www.adzuna.in/search"
-    for i in range(1, 2):
+    for i in range(1, 1):
         response = requests.get(f"{base_url}?&q={title}&p={i}&w={location}")
         soup = BeautifulSoup(response.text, 'html.parser')
         cards = soup.find_all('article', class_='a')
@@ -134,7 +134,7 @@ def times_job(title, location):
 def jobRapido(title, location):
     jobs_list = []
     base_url = "https://in.jobrapido.com"
-    for i in range(1, 2):
+    for i in range(1, 1):
         response = requests.get(f"{base_url}/{title}-jobs-in-{location}?p={i}")
         soup = BeautifulSoup(response.text, 'html.parser')
         cards = soup.find_all('div', class_='result-item')
