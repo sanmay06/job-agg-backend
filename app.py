@@ -3,7 +3,6 @@ from flask_cors import CORS
 import os
 import psycopg2
 from dotenv import load_dotenv
-from flask_sqlalchemy import SQLAlchemy
 from jobs import internshala, adzuna, times_job, jobRapido
 
 load_dotenv()
@@ -12,8 +11,6 @@ app = Flask(__name__)
 CORS(app)
 
 url = os.getenv("DATABASE_URL")
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL")
-db = SQLAlchemy(app)
 connection = psycopg2.connect(url)
 
 insertUser = "INSERT INTO login (username, password, email) VALUES (%s, %s, %s)"
