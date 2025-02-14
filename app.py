@@ -234,6 +234,18 @@ def postProfile(profile_name):
         connection.rollback()
         print(e)
         return {"msg": "error", "error": str(e)}, 400
+from concurrent.futures import ThreadPoolExecutor
+
+def scrape_data(search, location, source):
+    if source == "Internshala":
+        return [tuple(job) for job in internshala(search, location)]
+    elif source == "Adzuna":
+        return [tuple(job) for job in adzuna(search, location)]
+    elif source == "TimesJobs":
+        return [tuple(job) for job in times_job(search, location)]
+    elif source == "JobRapido":
+        return [tuple(job) for job in jobRapido(search, location)]
+    return []
 
 @app.get('/home/<profile>')
 def PostJobs(profile):
@@ -241,52 +253,41 @@ def PostJobs(profile):
     try: 
         with connection.cursor() as cursor:
             cursor.execute(createJobs)
-            cursor.execute("SELECT location, search, internshalla, adzuna, timesjob, jobrapido FROM profiles WHERE name = %s AND username = %s", (profile, username))
+            cursor.execute(
+                "SELECT location, search, internshalla, adzuna, timesjob, jobrapido FROM profiles WHERE name = %s AND username = %s",
+                (profile, username),
+            )
             list = cursor.fetchone()
 
         if list is None:
             return {"msg": "failed to find the profile settings"}
 
-        location = list[0]
-        search = list[1]
-        intern = list[2]
-        adz = list[3]
-        times = list[4]
-        jobra = list[5]
+        location, search, intern, adz, times, jobra = list
 
+        sources = []
+        if intern == '1': sources.append("Internshala")
+        if adz == '1': sources.append("Adzuna")
+        if times == '1': sources.append("TimesJobs")
+        if jobra == '1': sources.append("JobRapido")
 
         all_jobs = []
-        web = []
+        with ThreadPoolExecutor() as executor:
+            results = executor.map(lambda src: scrape_data(search, location, src), sources)
+            for job_list in results:
+                all_jobs.extend(job_list)
 
-        # Append job data as tuples
-        if intern == '1':
-            all_jobs.extend([tuple(job) for job in internshala(search, location)])
-            web.append("Internshala")
-
-        if adz == '1':
-            all_jobs.extend([tuple(job) for job in adzuna(search, location)])
-            web.append("Adzuna")
-
-        if times == '1':
-            all_jobs.extend([tuple(job) for job in times_job(search, location)])
-            web.append("TimesJobs")
-
-        if jobra == '1':    
-            all_jobs.extend([tuple(job) for job in jobRapido(search, location)])
-            web.append("JobRapido")
-
-
-        # return all_jobs
-
-        with connection.cursor() as cursor: 
-            cursor.executemany(insertJobs, all_jobs)
-            connection.commit()
-        if web:
-            placeholders = ', '.join(['%s'] * len(web))  
-            query = f"SELECT * FROM jobs WHERE title = %s AND location = %s AND website IN ({placeholders})"
-            
+        # 🚀 Insert jobs efficiently
+        if all_jobs:
             with connection.cursor() as cursor:
-                cursor.execute(query, (search, location, *web))  # Unpacking `web`
+                cursor.executemany(insertJobs, all_jobs)
+                connection.commit()
+
+        # 🚀 Fetch jobs efficiently
+        if sources:
+            placeholders = ', '.join(['%s'] * len(sources))  
+            query = f"SELECT * FROM jobs WHERE title = %s AND location = %s AND website IN ({placeholders})"
+            with connection.cursor() as cursor:
+                cursor.execute(query, (search, location, *sources))
                 jobs = cursor.fetchall()
         else:
             jobs = []
@@ -296,7 +297,8 @@ def PostJobs(profile):
     except psycopg2.Error as e:
         connection.rollback()
         print(e)
-        return {"msg":"error", "error": str(e)}, 400
+        return {"msg": "error", "error": str(e)}, 400
+
     
 if __name__ == "__main__":
     app.run(debug=False)
