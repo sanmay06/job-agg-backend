@@ -46,21 +46,23 @@ createProfiles = """
         max INT,
         location VARCHAR(50),
         search VARCHAR(20)
+        UNIQUE (name, username)
     );
 """
 createJobs = """
     CREATE TABLE IF NOT EXISTS jobs (
         id SERIAL PRIMARY KEY,
         job_title varchar(20) ,
-        link VARCHAR(50) ,
-        title VARCHAR(10) ,
-        website varchar(10) ,
-        companyname VARCHAR(20) ,
+        link VARCHAR(500) ,
+        title VARCHAR(20) ,
+        website varchar(30) ,
+        companyname VARCHAR(100) ,
         salary INT,
         minsalary INT,
         maxsalary INT,
-        location VARCHAR(20) ,
+        location VARCHAR(50) ,
         createddate DATE DEFAULT CURRENT_DATE
+        UNIQUE (title, link, location)
     );
         
 """
@@ -73,50 +75,7 @@ get_all_profiles = "SELECT * FROM profiles WHERE username = (%s) "
 
 @app.route("/")
 def home():
-    profile = 'name'
-    username = 'retro'
-    try: 
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT location, search, internshalla, adzuna, timesjob, jobrapido FROM profiles WHERE name = %s AND username = %s", (profile, username))
-            list = cursor.fetchone()
-
-        if list is None:
-            return {"msg": "failed to find the profile settings"}
-
-        location = "bangalore"
-        search = list[1]
-        intern = list[2]
-        adz = list[3]
-        times = list[4]
-        jobra = list[5]
-
-
-        all_jobs = []
-
-        # Append job data as tuples
-        if intern == '1':
-            all_jobs.extend([tuple(job) for job in internshala(search, location)])
-
-        if adz == '1':
-            all_jobs.extend([tuple(job) for job in adzuna(search, location)])
-
-        if times == '1':
-            all_jobs.extend([tuple(job) for job in times_job(search, location)])
-
-        if jobra == '1':    
-            all_jobs.extend([tuple(job) for job in jobRapido(search, location)])
-
-        # return all_jobs
-
-        with connection.cursor() as cursor: 
-            cursor.executemany(insertJobs, all_jobs)
-            connection.commit()
-        return {"msg": "success", "new": len(all_jobs)}
-
-    except psycopg2.Error as e:
-        connection.rollback()
-        print(e)
-        return {"msg":"error", "error": str(e)}, 400
+    return "working"
 
 @app.post("/reg")
 def register():
