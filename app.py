@@ -10,8 +10,24 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-url = os.getenv("DATABASE_URL")
+url = "postgres://postgres.dambcrtyljufdjahsrxp:8blNKmCBGMWnRq1b@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?sslmode=require"
 connection = psycopg2.connect(url)
+
+# username = "postgres"
+# password = "dambcrtyljufdjdjahsrxp:8blNKmCBGMWnRq1b"
+# host = "db.dambcrtyljufdjahsrxp.supabase.co"
+# database_name = "postgres"
+# port = 6543
+
+# # Connect to the database
+# connection = psycopg2.connect(
+#     host=host,
+#     database=database_name,
+#     user=username,
+#     password=password,
+#     port = port,
+#     sslmode="require"
+# )
 
 insertUser = "INSERT INTO login (username, password, email) VALUES (%s, %s, %s)"
 
@@ -212,6 +228,7 @@ def PostJobs(profile):
     username = request.args.get('user')
     try: 
         with connection.cursor() as cursor:
+            cursor.execute(createJobs)
             cursor.execute("SELECT location, search, internshalla, adzuna, timesjob, jobrapido FROM profiles WHERE name = %s AND username = %s", (profile, username))
             list = cursor.fetchone()
 
