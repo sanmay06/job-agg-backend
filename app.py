@@ -244,7 +244,7 @@ def scrape_internshala(profile):
         if(profile_data[2] == '0'):
             return {},200
 
-        location, search = profile_data
+        location, search, i = profile_data
         jobs = internshala(search, location)
 
         if jobs:
@@ -273,7 +273,7 @@ def scrape_adzuna(profile):
         if(profile_data[2] == '0'):
             return {},200
 
-        location, search = profile_data
+        location, search, i = profile_data
         jobs = adzuna(search, location)
 
         if jobs:
@@ -302,7 +302,7 @@ def scrape_timesjob(profile):
         if(profile_data[2] == '0'):
             return {},200        
 
-        location, search = profile_data
+        location, search, i = profile_data
         jobs = times_job(search, location)
 
         if jobs:
@@ -331,7 +331,7 @@ def scrape_jobrapido(profile):
         if(profile_data[2] == '0'):
             return {},200
 
-        location, search = profile_data
+        location, search,i = profile_data
         jobs = jobRapido(search, location)
 
         if jobs:
@@ -351,11 +351,34 @@ def fetch_jobs(profile):
     username = request.args.get('user')
     try:
         with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM jobs WHERE profile_name = %s AND username = %s", (profile, username))
-            jobs = cursor.fetchall()
-        
-        if not jobs:
-            return {"msg": "No jobs found."}, 404
+            cursor.execute("Select search, location, internshalla, adzuna, timesjob, jobrapido from profiles where name = %s AND username = %s", (profile, username))
+            websites = cursor.fetchone()
+            if websites is None:
+                return {"msg":"failed"}
+            search, location, intern, adz, times, jobra = websites
+            web = []
+        if intern == '1':
+            web.append("Internshala")
+
+        if adz == '1':
+            web.append("Adzuna")
+
+        if times == '1':
+            web.append("TimesJobs")
+
+        if jobra == '1':    
+            web.append("JobRapido")
+        if web:
+            placeholders = ', '.join(['%s'] * len(web))  
+            query = f"SELECT * FROM jobs WHERE title = %s AND location = %s AND website IN ({placeholders})"
+            
+            with connection.cursor() as cursor:
+                cursor.execute(query, (search, location, *web))  
+                jobs = cursor.fetchall()
+        else:
+            jobs = []
+
+        return {"msg": "success", 'jobs': jobs}, 200
         
         return {"msg": "Jobs fetched successfully.", "jobs": jobs}, 200
     
