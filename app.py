@@ -169,7 +169,6 @@ def getProfile(name):
             cursor.execute(createProfiles)
             cursor.execute(get_all_profiles, (username,))
             profiles = cursor.fetchone()
-            # print(profiles)
         return {"msg": "success", "profile" : profiles}, 200
     except psycopg2.Error as e:
         connection.rollback()
@@ -181,14 +180,14 @@ def get_profile_id(username, old_name):
     with connection.cursor() as cursor:
         cursor.execute("SELECT id FROM profiles WHERE username = %s AND name = %s", (username, old_name))
         result = cursor.fetchone()
-        return result[0] if result else None  # Returns ID if found, else None
+        return result[0] if result else None 
 
 @app.post("/profile/<profile_name>")
 def postProfile(profile_name):
     data = request.get_json()
     try:
         username = data['user']
-        new_name = data["name"]  # New name if updating
+        new_name = data["name"]  
         search = data["search"]
         sites = data["sites"]
         min_salary = data['min']
@@ -205,13 +204,11 @@ def postProfile(profile_name):
         location = data['location']
 
         with connection.cursor() as cursor:
-            # Check if profile exists
             cursor.execute(createProfiles)
             cursor.execute("SELECT id FROM profiles WHERE username = %s AND name = %s", (username, profile_name))
             profile = cursor.fetchone()
 
             if profile:
-                # Profile exists -> Update it
                 profile_id = profile[0]
                 cursor.execute("""
                     UPDATE profiles 
@@ -222,7 +219,6 @@ def postProfile(profile_name):
                 connection.commit()
                 return {"msg": "Profile updated successfully"}, 200
             else:
-                # Profile doesn't exist -> Create a new one
                 cursor.execute("""
                     INSERT INTO profiles (name, username, internshalla, adzuna, timesjob, jobrapido, min, max, location, search)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -234,37 +230,116 @@ def postProfile(profile_name):
         connection.rollback()
         print(e)
         return {"msg": "error", "error": str(e)}, 400
-@app.get('/scrape_jobs/<profile>')
-def scrapeJobs(profile):
+@app.get('/scrape_jobs/internshala/<profile>')
+def scrape_internshala(profile):
     username = request.args.get('user')
-
     try:
         with connection.cursor() as cursor:
-            cursor.execute(createJobs)
-            cursor.execute("SELECT location, search, internshalla, adzuna, timesjob, jobrapido FROM profiles WHERE name = %s AND username = %s", (profile, username))
+            cursor.execute("SELECT location, search, internshalla FROM profiles WHERE name = %s AND username = %s", (profile, username))
+            profile_data = cursor.fetchone()
+
+        if profile_data is None:
+            return {"msg": "Profile not found"}, 404
+        
+        if(profile_data[2] == '0'):
+            return {},200
+
+        location, search = profile_data
+        jobs = internshala(search, location)
+
+        if jobs:
+            with connection.cursor() as cursor:
+                cursor.executemany(insertJobs, jobs)
+                connection.commit()
+
+        return {"msg": "Internshala scraping completed."}, 200
+
+    except psycopg2.Error as e:
+        connection.rollback()
+        print("Error:", e)
+        return {"msg": "error", "error": str(e)}, 400
+
+@app.get('/scrape_jobs/adzuna/<profile>')
+def scrape_adzuna(profile):
+    username = request.args.get('user')
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT location, search, adzuna FROM profiles WHERE name = %s AND username = %s", (profile, username))
+            profile_data = cursor.fetchone()
+
+        if profile_data is None:
+            return {"msg": "Profile not found"}, 404
+        
+        if(profile_data[2] == '0'):
+            return {},200
+
+        location, search = profile_data
+        jobs = adzuna(search, location)
+
+        if jobs:
+            with connection.cursor() as cursor:
+                cursor.executemany(insertJobs, jobs)
+                connection.commit()
+
+        return {"msg": "Adzuna scraping completed."}, 200
+
+    except psycopg2.Error as e:
+        connection.rollback()
+        print("Error:", e)
+        return {"msg": "error", "error": str(e)}, 400
+
+@app.get('/scrape_jobs/timesjob/<profile>')
+def scrape_timesjob(profile):
+    username = request.args.get('user')
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT location, search, timesjob FROM profiles WHERE name = %s AND username = %s", (profile, username))
+            profile_data = cursor.fetchone()
+
+        if profile_data is None:
+            return {"msg": "Profile not found"}, 404
+        
+        if(profile_data[2] == '0'):
+            return {},200        
+
+        location, search = profile_data
+        jobs = times_job(search, location)
+
+        if jobs:
+            with connection.cursor() as cursor:
+                cursor.executemany(insertJobs, jobs)
+                connection.commit()
+
+        return {"msg": "TimesJob scraping completed."}, 200
+
+    except psycopg2.Error as e:
+        connection.rollback()
+        print("Error:", e)
+        return {"msg": "error", "error": str(e)}, 400
+
+@app.get('/scrape_jobs/jobrapido/<profile>')
+def scrape_jobrapido(profile):
+    username = request.args.get('user')
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT location, search,jobrapido FROM profiles WHERE name = %s AND username = %s", (profile, username))
             profile_data = cursor.fetchone()
 
         if profile_data is None:
             return {"msg": "Profile not found"}, 404
 
-        location, search, intern, adz, times, jobra = profile_data
-        all_jobs = []
-        
-        if intern == '1':
-            all_jobs.extend(internshala(search, location))
-        if adz == '1':
-            all_jobs.extend(adzuna(search, location))
-        if times == '1':
-            all_jobs.extend(times_job(search, location))
-        if jobra == '1':
-            all_jobs.extend(jobRapido(search, location))
+        if(profile_data[2] == '0'):
+            return {},200
 
-        if all_jobs:
-            with connection.cursor() as cursor: 
-                cursor.executemany(insertJobs, all_jobs)
+        location, search = profile_data
+        jobs = jobRapido(search, location)
+
+        if jobs:
+            with connection.cursor() as cursor:
+                cursor.executemany(insertJobs, jobs)
                 connection.commit()
 
-        return {"msg": "Scraping completed and jobs stored."}, 200
+        return {"msg": "JobRapido scraping completed."}, 200
 
     except psycopg2.Error as e:
         connection.rollback()
@@ -272,27 +347,20 @@ def scrapeJobs(profile):
         return {"msg": "error", "error": str(e)}, 400
 
 @app.get('/fetch_jobs/<profile>')
-def fetchJobs(profile):
+def fetch_jobs(profile):
     username = request.args.get('user')
-
     try:
         with connection.cursor() as cursor:
-            cursor.execute("SELECT location, search FROM profiles WHERE name = %s AND username = %s", (profile, username))
-            profile_data = cursor.fetchone()
-
-            if not profile_data:
-                return {"msg": "Profile not found"}, 404
-
-            location, search = profile_data
-
-            cursor.execute("SELECT * FROM jobs WHERE title = %s AND location = %s", (search, location))
+            cursor.execute("SELECT * FROM jobs WHERE profile_name = %s AND username = %s", (profile, username))
             jobs = cursor.fetchall()
-
-        return {"msg": "success", "jobs": jobs}, 200
-
+        
+        if not jobs:
+            return {"msg": "No jobs found."}, 404
+        
+        return {"msg": "Jobs fetched successfully.", "jobs": jobs}, 200
+    
     except psycopg2.Error as e:
-        connection.rollback()
-        print(e)
+        print("Error:", e)
         return {"msg": "error", "error": str(e)}, 400
     
 
