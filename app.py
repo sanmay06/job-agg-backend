@@ -322,7 +322,7 @@ def scrape_jobrapido(profile):
     username = request.args.get('user')
     try:
         with connection.cursor() as cursor:
-            cursor.execute("SELECT location, search,jobrapido FROM profiles WHERE name = %s AND username = %s", (profile, username))
+            cursor.execute("SELECT location, search, jobrapido FROM profiles WHERE name = %s AND username = %s", (profile, username))
             profile_data = cursor.fetchone()
 
         if profile_data is None:
