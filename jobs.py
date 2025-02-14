@@ -1,73 +1,97 @@
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
 import re
 
-def addDB(job, title, name, location, salary, url, db, website):
-    """
-    Inserts job data into the database (MongoDB).
+def clean_and_split_locations(location):
+    """Splits multiple locations and removes invalid ones."""
+    if not location:
+        return []  
 
-    :param job: Job category (e.g., title of the job)
-    :param title: Job title
-    :param name: Company name
-    :param location: Job location
-    :param salary: Salary details
-    :param url: URL of the job posting
-    :param db: MongoDB collection object
-    :param website: Source website
-    """
+    # Convert to lowercase for easier matching
+    location = location.lower()
+
+    # List of non-location words to remove
+    invalid_terms = ["not specified", "remote", "flexible", "hybrid"]
+
+    # Remove unwanted terms (e.g., "Bangalore (Hybrid)" → "Bangalore")
+    for term in invalid_terms:
+        location = location.replace(f"({term})", "").strip()
+
+    # Common delimiters for multiple locations
+    delimiters = [",", "/", "&", " or ", " and "]
+
+    # Replace delimiters with a comma for easy splitting
+    for delimiter in delimiters:
+        location = location.replace(delimiter, ",")
+
+    # Split locations, strip spaces, and remove any empty ones
+    locations = [loc.strip().title() for loc in location.split(",") if loc.strip() and loc not in invalid_terms]
+
+    return locations
+
+def addDB(job, title, name, location, salary, url, website):
+    """Creates separate job entries for each valid location."""
+    min_salary = None
+    max_salary = None
+    salary_value = None
+
     if salary:
         salary_numbers = re.findall(r'\d+', salary)
-    #print(salary_numbers,"\t")
-        if len(salary_numbers) == 4:
-            salary_min = int(salary_numbers[0])*1000+int(salary_numbers[1])  # the first number (10000)
-            salary_max = int(salary_numbers[2])*1000+int(salary_numbers[3])  # the second number (10323)
-            salary_value = (salary_min + salary_max) / 2  # calculate the average
-        elif salary_numbers:
-            salary_value = int(salary_numbers[0])*1000+int(salary_numbers[1])  # if only one number is found, use it directly
-        else:
-            salary_value = 0
-    else:
-        salary_value = 0
 
-    job_data = {
-        "title": title,
-        "company_name": name,
-        "salary": salary_value,
-        "obtained salary":salary,
-        "location": location,
-        "url": url,
-        "scraped_at": datetime.utcnow(),
-        "website": website
-    }
+        if len(salary_numbers) == 2:  # Salary range case
+            min_salary = int(salary_numbers[0]) * 1000
+            max_salary = int(salary_numbers[1]) * 1000
+            salary_value = None  # Set salary to NULL since we have a range
+        elif len(salary_numbers) == 4:  # Salary range case
+            min_salary = int(salary_numbers[0]) * 1000 + int(salary_numbers[1])
+            max_salary = int(salary_numbers[2]) * 1000 + int(salary_numbers[3])
+            salary_value = None  
+        elif len(salary_numbers) == 1:  # Single salary case
+            salary_value = int(salary_numbers[0])
 
+    # Get cleaned list of locations
+    location_list = clean_and_split_locations(location)
 
-    db.update_one(
-        {"category": job},
-        {"$push": {"jobs": job_data}},
-        upsert=True
-    )
+    # Create a separate job entry for each valid location
+    jobs = []
+    for loc in location_list:
+        jobs.append([
+            title,        # Job title
+            url,          # Job link
+            job,          # Job category
+            name,         # Company name
+            salary_value, # Single salary (NULL if range exists)
+            min_salary,   # Min salary (NULL if no range)
+            max_salary,   # Max salary (NULL if no range)
+            loc.lower(),          # Individual cleaned location
+            website
+        ])
+    
+    return jobs  # Return list of job entries
 
-def internshala(title, db, location):
+def internshala(title, location):
+    jobs_list = []
     for i in range(1, 5):
-        response=requests.get(f"https://internshala.com/internships/{title}-internship-in-{location}/page-{i}/")
+        response = requests.get(f"https://internshala.com/internships/{title}-internship-in-{location}/page-{i}/")
         soup = BeautifulSoup(response.text, 'html.parser')
         cards = soup.find_all('div', 'container-fluid')
 
         for card in cards:
             try:
-                job_title = card.find('h3','job-internship-name').text
-                job_company_name = card.find('p','company-name').text
-                job_salary = card.find('span','stipend').text
+                job_title = card.find('h3','job-internship-name').text.strip()
+                job_company_name = card.find('p','company-name').text.strip()
+                job_salary = card.find('span','stipend').text.strip()
                 location_tag = card.find('div', class_='row-1-item locations')
                 job_location = location_tag.text.strip() if location_tag else "Not specified"
-                job_url ="https://internshala.com/"+card.find('a','job-title-href')['href']
+                job_url = "https://internshala.com/" + card.find('a', 'job-title-href')['href']
 
-                addDB(title, job_title, job_company_name, job_location, job_salary, job_url, db, 'Internshala')
+                jobs_list.extend(addDB(title, job_title, job_company_name, job_location, job_salary, job_url, 'Internshala'))
             except AttributeError:
                 continue
+    return jobs_list
 
-def adzuna(title, db, location):
+def adzuna(title, location):
+    jobs_list = []
     base_url = "https://www.adzuna.in/search"
     for i in range(1, 5):
         response = requests.get(f"{base_url}?&q={title}&p={i}&w={location}")
@@ -81,13 +105,15 @@ def adzuna(title, db, location):
                 job_location = card.find('div', class_='ui-location').text.strip()
                 job_url = "https://www.adzuna.in/" + card.find('a', class_='text-adzuna-green-500')['href']
 
-                addDB(title, job_title, job_company_name, job_location, "NA", job_url, db, 'Adzuna')
+                jobs_list.extend(addDB(title, job_title, job_company_name, job_location, "NA", job_url, 'Adzuna'))
             except AttributeError:
                 continue
+    return jobs_list
 
-def Times_job(title, db, location):
-    base_url = "https://www.timesjobs.com/candidate/job-search.html?"
-    response = requests.get(f"{base_url}?searchType=personalizedSearch&from=submit&searchTextSrc=&searchTextText=&txtKeywords={title}&txtLocation={location}")
+def times_job(title, location):
+    jobs_list = []
+    base_url = "https://www.timesjobs.com/candidate/job-search.html"
+    response = requests.get(f"{base_url}?searchType=personalizedSearch&from=submit&txtKeywords={title}&txtLocation={location}")
     soup = BeautifulSoup(response.text, 'html.parser')
     cards = soup.find_all('li', class_='clearfix')
 
@@ -97,15 +123,16 @@ def Times_job(title, db, location):
             job_company_name = card.find('h3', class_='joblist-comp-name').text.strip()
             salary_tag = card.find('span', class_='salary')
             job_salary = salary_tag.text.strip() if salary_tag else "Not specified"
-            job_location=card.find('li','srp-zindex').text.strip()
-            job_l=card.find('a')
-            job_url = "https://www.timesjobs.com/"+job_l['href']
-            #print(job_url)
-            addDB(title, job_title, job_company_name, job_location, job_salary, job_url, db, 'TimesJobs')
+            job_location = card.find('li', 'srp-zindex').text.strip()
+            job_url = "https://www.timesjobs.com/" + card.find('a')['href']
+
+            jobs_list.extend(addDB(title, job_title, job_company_name, job_location, job_salary, job_url, 'TimesJobs'))
         except AttributeError:
             continue
+    return jobs_list
 
-def jobRapido(title, db, location):
+def jobRapido(title, location):
+    jobs_list = []
     base_url = "https://in.jobrapido.com"
     for i in range(1, 5):
         response = requests.get(f"{base_url}/{title}-jobs-in-{location}?p={i}")
@@ -119,6 +146,7 @@ def jobRapido(title, db, location):
                 job_location = card.find('div', class_='result-item__location').text.strip()
                 job_url = card.find('a', class_='result-item__link')['href']
 
-                addDB(title, job_title, job_company_name, job_location, None, job_url, db, 'JobRapido')
+                jobs_list.extend(addDB(title, job_title, job_company_name, job_location, None, job_url, 'JobRapido'))
             except AttributeError:
                 continue
+    return jobs_list
