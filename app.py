@@ -234,71 +234,67 @@ def postProfile(profile_name):
         connection.rollback()
         print(e)
         return {"msg": "error", "error": str(e)}, 400
-from concurrent.futures import ThreadPoolExecutor
-
-def scrape_data(search, location, source):
-    if source == "Internshala":
-        return [tuple(job) for job in internshala(search, location)]
-    elif source == "Adzuna":
-        return [tuple(job) for job in adzuna(search, location)]
-    elif source == "TimesJobs":
-        return [tuple(job) for job in times_job(search, location)]
-    elif source == "JobRapido":
-        return [tuple(job) for job in jobRapido(search, location)]
-    return []
-
-@app.get('/home/<profile>')
-def PostJobs(profile):
+@app.get('/scrape_jobs/<profile>')
+def scrapeJobs(profile):
     username = request.args.get('user')
-    try: 
+
+    try:
         with connection.cursor() as cursor:
             cursor.execute(createJobs)
-            cursor.execute(
-                "SELECT location, search, internshalla, adzuna, timesjob, jobrapido FROM profiles WHERE name = %s AND username = %s",
-                (profile, username),
-            )
-            list = cursor.fetchone()
+            cursor.execute("SELECT location, search, internshalla, adzuna, timesjob, jobrapido FROM profiles WHERE name = %s AND username = %s", (profile, username))
+            profile_data = cursor.fetchone()
 
-        if list is None:
-            return {"msg": "failed to find the profile settings"}
+        if profile_data is None:
+            return {"msg": "Profile not found"}, 404
 
-        location, search, intern, adz, times, jobra = list
-
-        sources = []
-        if intern == '1': sources.append("Internshala")
-        if adz == '1': sources.append("Adzuna")
-        if times == '1': sources.append("TimesJobs")
-        if jobra == '1': sources.append("JobRapido")
-
+        location, search, intern, adz, times, jobra = profile_data
         all_jobs = []
-        with ThreadPoolExecutor() as executor:
-            results = executor.map(lambda src: scrape_data(search, location, src), sources)
-            for job_list in results:
-                all_jobs.extend(job_list)
+        
+        if intern == '1':
+            all_jobs.extend(internshala(search, location))
+        if adz == '1':
+            all_jobs.extend(adzuna(search, location))
+        if times == '1':
+            all_jobs.extend(times_job(search, location))
+        if jobra == '1':
+            all_jobs.extend(jobRapido(search, location))
 
-        # 🚀 Insert jobs efficiently
         if all_jobs:
-            with connection.cursor() as cursor:
+            with connection.cursor() as cursor: 
                 cursor.executemany(insertJobs, all_jobs)
                 connection.commit()
 
-        # 🚀 Fetch jobs efficiently
-        if sources:
-            placeholders = ', '.join(['%s'] * len(sources))  
-            query = f"SELECT * FROM jobs WHERE title = %s AND location = %s AND website IN ({placeholders})"
-            with connection.cursor() as cursor:
-                cursor.execute(query, (search, location, *sources))
-                jobs = cursor.fetchall()
-        else:
-            jobs = []
+        return {"msg": "Scraping completed and jobs stored."}, 200
 
-        return {"msg": "success", "new": len(all_jobs), 'jobs': jobs}, 200
+    except psycopg2.Error as e:
+        connection.rollback()
+        print("Error:", e)
+        return {"msg": "error", "error": str(e)}, 400
+
+@app.get('/fetch_jobs/<profile>')
+def fetchJobs(profile):
+    username = request.args.get('user')
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT location, search FROM profiles WHERE name = %s AND username = %s", (profile, username))
+            profile_data = cursor.fetchone()
+
+            if not profile_data:
+                return {"msg": "Profile not found"}, 404
+
+            location, search = profile_data
+
+            cursor.execute("SELECT * FROM jobs WHERE title = %s AND location = %s", (search, location))
+            jobs = cursor.fetchall()
+
+        return {"msg": "success", "jobs": jobs}, 200
 
     except psycopg2.Error as e:
         connection.rollback()
         print(e)
         return {"msg": "error", "error": str(e)}, 400
-
     
+
 if __name__ == "__main__":
     app.run(debug=False)
