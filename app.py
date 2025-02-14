@@ -58,23 +58,23 @@ createProfiles = """
         min INT,
         max INT,
         location VARCHAR(50),
-        search VARCHAR(20)
+        search VARCHAR(20),
         UNIQUE (name, username)
     );
 """
 createJobs = """
     CREATE TABLE IF NOT EXISTS jobs (
         id SERIAL PRIMARY KEY,
-        job_title varchar(20) ,
+        job_title varchar(100) ,
         link VARCHAR(500) ,
         title VARCHAR(20) ,
-        website varchar(30) ,
+        website varchar(100) ,
         companyname VARCHAR(100) ,
         salary INT,
         minsalary INT,
         maxsalary INT,
-        location VARCHAR(50) ,
-        createddate DATE DEFAULT CURRENT_DATE
+        location VARCHAR(100) ,
+        createddate DATE DEFAULT CURRENT_DATE ,
         UNIQUE (title, link, location)
     );
         
@@ -86,8 +86,19 @@ get_profiles = "SELECT name FROM profiles WHERE username = (%s) "
 
 get_all_profiles = "SELECT * FROM profiles WHERE username = (%s) "
 
+
 @app.route("/")
 def home():
+#     connection.rollback()
+#     cursor = connection.cursor()
+    
+#     try:
+#         cursor.execute(createJobs)
+#         cursor.execute("alter table jobs alter column job_title type varchar(100)")
+#         connection.commit()
+#     except psycopg2.Error as e:
+#         connection.rollback()
+#         return str(e), 400
     return "working"
 
 @app.post("/reg")
@@ -195,6 +206,7 @@ def postProfile(profile_name):
 
         with connection.cursor() as cursor:
             # Check if profile exists
+            cursor.execute(createProfiles)
             cursor.execute("SELECT id FROM profiles WHERE username = %s AND name = %s", (username, profile_name))
             profile = cursor.fetchone()
 
